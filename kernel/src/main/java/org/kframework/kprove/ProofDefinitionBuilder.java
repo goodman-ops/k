@@ -16,8 +16,6 @@ import scala.Option;
 import scala.Tuple2;
 
 import java.io.File;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,15 +26,6 @@ import java.util.stream.Collectors;
  * Created on 07-Nov-19.
  */
 public class ProofDefinitionBuilder {
-
-    private static Map<Definition, Definition>
-            cache = Collections.synchronizedMap(new LinkedHashMap<Definition, Definition>() {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry entry) {
-            return size() > 10;
-        }
-    });
-
 
     private final CompiledDefinition compiledDefinition;
     private final Backend backend;
@@ -75,15 +64,16 @@ public class ProofDefinitionBuilder {
 
         Set<Module> modules = kompile.parseModules(compiledDefinition, defModuleNameUpdated, absSpecFile,
                 backend.excludedModuleTags());
-        assert definitionAndCache.compiledDefinition != null;
-        definitionStorage.save(definitionAndCache, definitionAndCache.compiledDefinition.kompileOptions);
 
         Map<String, Module> modulesMap = modules.stream().collect(Collectors.toMap(Module::name, m -> m));
         Definition parsedDefinition = compiledDefinition.getParsedDefinition();
         Module defModule = getModule(defModuleNameUpdated, modulesMap, parsedDefinition);
         Definition rawExtendedDef = Definition.apply(defModule, parsedDefinition.entryModules(),
                 parsedDefinition.att());
+
         Definition compiledExtendedDef = compileDefinition(backend, rawExtendedDef); //also resolves imports
+        assert definitionAndCache.compiledDefinition != null;
+        definitionStorage.save(definitionAndCache, definitionAndCache.compiledDefinition.kompileOptions);
         compiledExtendedDef = backend.proofDefinitionNonCachedSteps(extraConcreteRuleLabels).apply(compiledExtendedDef);
 
         Module specModule = getModule(specModuleNameUpdated, modulesMap, parsedDefinition);
@@ -102,11 +92,11 @@ public class ProofDefinitionBuilder {
         throw KEMException.criticalError("Module " + defModule + " does not exist.");
     }
 
-    private static Definition compileDefinition(Backend backend, Definition combinedDef) {
-        Definition compiled = cache.get(combinedDef);
+    private Definition compileDefinition(Backend backend, Definition combinedDef) {
+        Definition compiled = definitionAndCache.extendedDefinitionsCache.get(combinedDef);
         if (compiled == null) {
             compiled = backend.steps().apply(combinedDef);
-            cache.put(combinedDef, compiled);
+            definitionAndCache.extendedDefinitionsCache.put(combinedDef, compiled);
         }
         return compiled;
     }
